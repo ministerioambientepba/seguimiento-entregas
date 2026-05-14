@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0F6E56">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Entregas">
+<link rel="manifest" href="manifest.json">
+<title>Seguimiento Entregas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--green:#0F6E56;--green-d:#085041;--green-l:#EAF3DE;--border:#e2e4e8;--bg:#f4f5f7;--card:#fff;--text:#1a1a1a;--muted:#666;--hint:#aaa;--radius:10px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:var(--text);background:var(--bg);min-height:100vh}
+/* Setup screen */
+#setup{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.setup-card{background:var(--card);border-radius:16px;border:1px solid var(--border);padding:32px 28px;max-width:420px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+.setup-logo{width:52px;height:52px;background:var(--green);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:26px}
+.setup-card h1{font-size:18px;font-weight:700;text-align:center;margin-bottom:6px}
+.setup-card .sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px;line-height:1.5}
+.setup-field{margin-bottom:14px}
+.setup-field label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.setup-field input{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace;outline:none;transition:.15s;background:#fafafa}
+.setup-field input:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(15,110,86,.12);background:#fff}
+.setup-hint{font-size:11px;color:var(--hint);margin-top:4px;line-height:1.4}
+.setup-hint a{color:var(--green);text-decoration:none}
+.btn-connect{width:100%;padding:11px;background:var(--green);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;transition:.15s}
+.btn-connect:hover{background:var(--green-d)}
+.btn-connect:disabled{opacity:.6;cursor:not-allowed}
+#setup-err{font-size:12px;color:#a32d2d;background:#FCEBEB;border:1px solid #f5b0b0;border-radius:7px;padding:8px 12px;margin-top:10px;display:none}
+/* Loading */
+#loading{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:14px}
+.spinner{width:36px;height:36px;border:3px solid rgba(15,110,86,.2);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* App */
+#app{display:none;max-width:960px;margin:0 auto;padding:0 12px 80px}
+.topbar{background:var(--green);color:#fff;padding:12px 16px;margin:0 -12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar h1{font-size:15px;font-weight:600}
+.topbar .info{font-size:11px;opacity:.75;margin-top:2px}
+.topbar-right{font-size:11px;opacity:.8;text-align:right}
+/* Bottom nav for mobile */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:200;padding-bottom:env(safe-area-inset-bottom)}
+.nav-btn{flex:1;padding:10px 4px 8px;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--hint);font-weight:500;transition:.15s}
+.nav-btn.active{color:var(--green)}
+.nav-btn .icon{font-size:20px;line-height:1}
+/* Desktop tabs */
+.tabs{display:none;gap:4px;background:var(--card);border-radius:var(--radius);padding:6px;margin-bottom:14px;border:1px solid var(--border)}
+.tab-btn{flex:1;padding:8px 10px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;border-radius:7px;color:var(--muted);transition:.15s}
+.tab-btn:hover{background:var(--bg);color:var(--text)}
+.tab-btn.active{background:var(--green);color:#fff}
+@media(min-width:640px){.tabs{display:flex}.bottom-nav{display:none}.topbar-right{display:block}}
+/* Cards */
+.card{background:var(--card);border-radius:var(--radius);border:1px solid var(--border);padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.section-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #f0f1f3}
+/* Form */
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:9px 11px;margin-bottom:12px}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fg label{font-size:11px;color:var(--muted);font-weight:600}
+.fg input,.fg select,.fg textarea{font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:#fff;color:var(--text);width:100%;outline:none;transition:.15s;-webkit-appearance:none}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--green);box-shadow:0 0 0 2px rgba(15,110,86,.1)}
+.fg select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;padding-right:26px}
+.fg textarea{resize:vertical;min-height:54px;font-family:inherit}
+.span2{grid-column:span 2}
+/* Buttons */
+.btn{padding:8px 16px;border-radius:7px;font-size:13px;cursor:pointer;font-weight:500;transition:.15s;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn-primary{background:var(--green);color:#fff;border-color:var(--green)}
+.btn-primary:hover{background:var(--green-d)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{background:#fff;color:var(--text);border-color:var(--border)}
+.btn-secondary:hover{background:var(--bg)}
+.btn-danger{background:#fff;color:#a32d2d;border-color:#f5c0c0}
+.btn-danger:hover{background:#FCEBEB}
+.btn-export{background:#185FA5;color:#fff}
+.btn-export:hover{background:#0C447C}
+.btn-sql{background:#533AB7;color:#fff}
+.btn-sql:hover{background:#3C3489}
+.btn-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
+/* Alert */
+.alert{padding:9px 13px;border-radius:7px;font-size:12px;margin-bottom:12px;font-weight:500;display:flex;align-items:center;gap:8px}
+.alert-ok{background:#EAF3DE;color:#2a5f10;border:1px solid #b8d98a}
+.alert-err{background:#FCEBEB;color:#7b1f1f;border:1px solid #f5b0b0}
+/* Table */
+.table-wrap{overflow-x:auto;border-radius:8px;border:1px solid #e8eaed}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:#f7f8fa;padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #e8eaed;white-space:nowrap;font-size:11px}
+td{padding:6px 10px;border-bottom:1px solid #f0f1f3;color:var(--text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f7fcfa}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.bg{background:#EAF3DE;color:#2a5f10}
+.ba{background:#FFF3CD;color:#7a4f0d}
+.bx{background:#f0f1f3;color:#666}
+/* Metrics */
+.metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:9px;margin-bottom:14px}
+.metric{background:#f7f8fa;border-radius:8px;padding:10px 12px;border:1px solid #e8eaed}
+.metric .v{font-size:20px;font-weight:700;color:var(--green)}
+.metric .l{font-size:10px;color:var(--hint);margin-top:1px}
+/* Filter */
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end}
+.ff{display:flex;flex-direction:column;gap:3px;min-width:120px}
+.ff label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.ff select,.ff input{font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);-webkit-appearance:none;outline:none}
+.ff select:focus,.ff input:focus{border-color:var(--green)}
+/* Pager */
+.pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;color:var(--muted)}
+.pager button{padding:4px 11px;font-size:12px;border:1px solid var(--border);border-radius:5px;background:#fff;cursor:pointer}
+.pager button:disabled{opacity:.4;cursor:not-allowed}
+/* Empty */
+.empty{text-align:center;padding:40px 20px;color:var(--hint);font-size:13px}
+/* Loader inline */
+.loading-inline{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding:20px 0}
+.mini-spin{width:18px;height:18px;border:2px solid rgba(15,110,86,.2);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+/* Export */
+.exp-block{margin-bottom:20px}
+.exp-block p{font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5}
+pre{font-family:'Courier New',monospace;font-size:11px;background:#f7f8fa;padding:12px;border-radius:7px;overflow-x:auto;color:#555;line-height:1.6;border:1px solid #e8eaed}
+</style>
+</head>
+<body>
+
+<!-- Setup -->
+<div id="setup">
+  <div class="setup-card">
+    <div class="setup-logo">🌿</div>
+    <h1>Seguimiento Entregas</h1>
+    <p class="sub">Ministerio de Ambiente · Provincia de Buenos Aires<br>Ingresá las credenciales de tu proyecto Supabase para comenzar.</p>
+    <div class="setup-field">
+      <label>Supabase URL</label>
+      <input id="cfg-url" type="text" placeholder="https://xxxxxxxxxxxx.supabase.co" autocomplete="off" spellcheck="false">
+      <div class="setup-hint">Proyecto → Settings → API → Project URL</div>
+    </div>
+    <div class="setup-field">
+      <label>Anon / Public Key</label>
+      <input id="cfg-key" type="password" placeholder="eyJhbGciOi..." autocomplete="off">
+      <div class="setup-hint">Settings → API → Project API Keys → <code>anon public</code><br>
+        ¿Sin cuenta? <a href="https://supabase.com" target="_blank">Creá una gratis en supabase.com →</a>
+      </div>
+    </div>
+    <button class="btn-connect" id="btn-connect" onclick="doConnect()">Conectar</button>
+    <div id="setup-err"></div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spinner"></div>
+  <span style="font-size:13px;color:var(--muted)" id="loading-msg">Conectando...</span>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="topbar">
+    <div>
+      <div class="info" id="topbar-info">cargando...</div>
+      <h1>Seguimiento Entregas</h1>
+    </div>
+    <div class="topbar-right">
+      <div id="sync-status" style="display:none">● en línea</div>
+      <button onclick="doLogout()" style="background:none;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-top:4px">Desconectar</button>
+    </div>
+  </div>
+
+  <!-- Desktop tabs -->
+  <div class="tabs" id="desktop-tabs">
+    <button class="tab-btn active" onclick="setTab('entregas')">📦 Entregas</button>
+    <button class="tab-btn" onclick="setTab('bienes')">🛒 Bienes</button>
+    <button class="tab-btn" onclick="setTab('consultas')">🔍 Consultas</button>
+    <button class="tab-btn" onclick="setTab('exportar')">💾 Exportar</button>
+  </div>
+
+  <div id="content"></div>
+
+  <!-- Mobile bottom nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="setTab('entregas')" id="nav-entregas"><span class="icon">📦</span>Entregas</button>
+    <button class="nav-btn" onclick="setTab('bienes')" id="nav-bienes"><span class="icon">🛒</span>Bienes</button>
+    <button class="nav-btn" onclick="setTab('consultas')" id="nav-consultas"><span class="icon">🔍</span>Consultas</button>
+    <button class="nav-btn" onclick="setTab('exportar')" id="nav-exportar"><span class="icon">💾</span>Exportar</button>
+  </nav>
+</div>
+
+<script>
+// ─── Config ───────────────────────────────────────────────────────────────────
+let db = null;
+const LS_URL = 'sb_url', LS_KEY = 'sb_key';
+
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const ANOS  = ["s/f","2022","2023","2024","2025","2026"];
+const ESTADOS = ["ENTREGADO","PENDIENTE","EN PROCESO"];
+const AREAS = ["Política Ambiental","Residuos Sólidos Urbanos","Transición Ecológica","DGA","Educación y Gobierno"];
+const PAGE = 50;
+
+// Dynamic catalogs loaded from DB
+let MUNICIPIOS = [], PROGRAMAS = [], CATEGORIAS = [], CAT_CONC = {};
+let eTotalCount = 0, bTotalCount = 0;
+
+// State
+let activeTab = "entregas";
+let alertMsg = null;
+let alertTimer = null;
+let pages = {entregas:1, bienes:1, consultas:1};
+let loading = {entregas:false, bienes:false, consultas:false};
+let cachedRows = {entregas:[], bienes:[], consultas:[]};
+let cachedCount = {entregas:0, bienes:0, consultas:0};
+let cachedAgg = {count:0, munis:0, qty:0, monto:0, entregados:0};
+
+let ef = {ano:"2025",mes:"",municipio:"",programa:"",area:"",categoria:"",concepto:"",ano_adq:"",mes_adq:"",monto_unitario:"",cantidad:"",fecha_remito:"",estado:"ENTREGADO",observaciones:""};
+let bf = {concepto:"",categoria:"",ano:"2025",mes:"",expediente:"",precio_unitario:"",cantidad:"",subsecretaria:"",observaciones:""};
+let qf = {municipio:"",programa:"",categoria:"",estado:"",ano:"",texto:""};
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  const url = localStorage.getItem(LS_URL), key = localStorage.getItem(LS_KEY);
+  if (url && key) { document.getElementById('cfg-url').value=url; document.getElementById('cfg-key').value=key; connectWith(url, key); }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+});
+
+async function doConnect() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  if (!url || !key) { showSetupErr('Completá ambos campos.'); return; }
+  document.getElementById('btn-connect').disabled = true;
+  document.getElementById('btn-connect').textContent = 'Conectando...';
+  connectWith(url, key);
+}
+
+async function connectWith(url, key) {
+  setScreen('loading');
+  setLoadMsg('Conectando con Supabase...');
+  try {
+    db = supabase.createClient(url, key);
+    // Test connection
+    const {error} = await db.from('entregas').select('id', {count:'exact', head:true});
+    if (error) throw error;
+    localStorage.setItem(LS_URL, url);
+    localStorage.setItem(LS_KEY, key);
+    setLoadMsg('Cargando catálogos...');
+    await loadCatalogs();
+    setScreen('app');
+    setTab('entregas');
+    updateHeader();
+  } catch(e) {
+    setScreen('setup');
+    showSetupErr('No se pudo conectar: ' + (e.message || e));
+    document.getElementById('btn-connect').disabled = false;
+    document.getElementById('btn-connect').textContent = 'Conectar';
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem(LS_URL); localStorage.removeItem(LS_KEY);
+  db = null; setScreen('setup');
+}
+
+async function loadCatalogs() {
+  const {data} = await db.from('entregas').select('municipio,programa,categoria,concepto').limit(5000);
+  if (data) {
+    MUNICIPIOS = [...new Set(data.map(r=>r.municipio).filter(Boolean))].sort();
+    PROGRAMAS  = [...new Set(data.map(r=>r.programa).filter(Boolean))].sort();
+    CATEGORIAS = [...new Set(data.map(r=>r.categoria).filter(Boolean))].sort();
+    CAT_CONC   = {};
+    data.forEach(r => {
+      if (!r.categoria) return;
+      if (!CAT_CONC[r.categoria]) CAT_CONC[r.categoria] = new Set();
+      if (r.concepto) CAT_CONC[r.categoria].add(r.concepto);
+    });
+    Object.keys(CAT_CONC).forEach(k => CAT_CONC[k]=[...CAT_CONC[k]].sort());
+  }
+}
+
+async function updateHeader() {
+  const {count:ce} = await db.from('entregas').select('id',{count:'exact',head:true});
+  const {count:cb} = await db.from('bienes_adquiridos').select('id',{count:'exact',head:true});
+  eTotalCount = ce||0; bTotalCount = cb||0;
+  document.getElementById('topbar-info').textContent = `${(ce||0).toLocaleString('es-AR')} entregas · ${cb||0} bienes`;
+}
+
+// ─── Screens ─────────────────────────────────────────────────────────────────
+function setScreen(s) {
+  document.getElementById('setup').style.display   = s==='setup'   ? 'flex' : 'none';
+  document.getElementById('loading').style.display = s==='loading' ? 'flex' : 'none';
+  document.getElementById('app').style.display     = s==='app'     ? 'block': 'none';
+}
+function setLoadMsg(m) { document.getElementById('loading-msg').textContent = m; }
+function showSetupErr(m) { const el=document.getElementById('setup-err'); el.style.display='block'; el.textContent=m; }
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function setTab(t) {
+  activeTab = t;
+  pages[t] = 1;
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['entregas','bienes','consultas','exportar'][i]===t));
+  ['entregas','bienes','consultas','exportar'].forEach(n=>{ const el=document.getElementById('nav-'+n); if(el) el.classList.toggle('active',n===t); });
+  render();
+  if (t!=='exportar') loadData(t);
+}
+
+// ─── Data ────────────────────────────────────────────────────────────────────
+async function loadData(tab) {
+  if (!db) return;
+  loading[tab] = true; render();
+  const off = (pages[tab]-1)*PAGE;
+
+  if (tab==='entregas') {
+    const {data,count,error} = await db.from('entregas').select('*',{count:'exact'}).range(off,off+PAGE-1).order('id',{ascending:false});
+    if (!error) { cachedRows.entregas=data||[]; cachedCount.entregas=count||0; }
+  }
+  else if (tab==='bienes') {
+    const {data,count,error} = await db.from('bienes_adquiridos').select('*',{count:'exact'}).range(off,off+PAGE-1).order('id',{ascending:false});
+    if (!error) { cachedRows.bienes=data||[]; cachedCount.bienes=count||0; }
+  }
+  else if (tab==='consultas') {
+    let q = db.from('entregas').select('*',{count:'exact'});
+    if (qf.ano) q=q.eq('ano',qf.ano);
+    if (qf.municipio) q=q.eq('municipio',qf.municipio);
+    if (qf.programa) q=q.eq('programa',qf.programa);
+    if (qf.categoria) q=q.eq('categoria',qf.categoria);
+    if (qf.estado) q=q.eq('estado',qf.estado);
+    if (qf.texto) q=q.or(`municipio.ilike.%${qf.texto}%,concepto.ilike.%${qf.texto}%,observaciones.ilike.%${qf.texto}%`);
+    const {data,count,error} = await q.range(off,off+PAGE-1).order('ano',{ascending:false});
+    if (!error) { cachedRows.consultas=data||[]; cachedCount.consultas=count||0; }
+
+    // Aggregates — fetch all filtered (up to 2000) for metrics
+    let qa = db.from('entregas').select('cantidad,monto_total,estado,municipio');
+    if (qf.ano) qa=qa.eq('ano',qf.ano);
+    if (qf.municipio) qa=qa.eq('municipio',qf.municipio);
+    if (qf.programa) qa=qa.eq('programa',qf.programa);
+    if (qf.categoria) qa=qa.eq('categoria',qf.categoria);
+    if (qf.estado) qa=qa.eq('estado',qf.estado);
+    if (qf.texto) qa=qa.or(`municipio.ilike.%${qf.texto}%,concepto.ilike.%${qf.texto}%`);
+    const {data:agg} = await qa.limit(2000);
+    if (agg) {
+      cachedAgg = {
+        count: count||0,
+        munis: new Set(agg.map(r=>r.municipio).filter(Boolean)).size,
+        qty:   agg.reduce((s,r)=>s+(Number(r.cantidad)||0),0),
+        monto: agg.reduce((s,r)=>s+(Number(r.monto_total)||0),0),
+        entregados: agg.filter(r=>r.estado==='ENTREGADO').length
+      };
+    }
+  }
+
+  loading[tab] = false; render();
+}
+
+// ─── CRUD ────────────────────────────────────────────────────────────────────
+async function addEntrega() {
+  if (!ef.municipio||!ef.ano||!ef.categoria||!ef.concepto) { showAlert('Completá municipio, año, categoría y concepto.','err'); return; }
+  const btn = document.getElementById('btn-add-e');
+  if (btn) { btn.disabled=true; btn.textContent='Guardando...'; }
+  const rec = {ano:ef.ano,mes:ef.mes,municipio:ef.municipio,programa:ef.programa,area:ef.area,categoria:ef.categoria,concepto:ef.concepto,ano_adq:ef.ano_adq,mes_adq:ef.mes_adq,monto_unitario:ef.monto_unitario||null,cantidad:ef.cantidad||null,fecha_remito:ef.fecha_remito||null,estado:ef.estado,monto_total:(ef.monto_unitario&&ef.cantidad)?String(Number(ef.monto_unitario)*Number(ef.cantidad)):null,observaciones:ef.observaciones};
+  const {error} = await db.from('entregas').insert([rec]);
+  if (error) { showAlert('Error al guardar: '+error.message,'err'); }
+  else {
+    ef={...ef,municipio:"",concepto:"",monto_unitario:"",cantidad:"",fecha_remito:"",observaciones:""};
+    showAlert('✓ Entrega guardada en la base de datos.');
+    await loadCatalogs();
+    await loadData('entregas');
+    await updateHeader();
+  }
+  if (btn) { btn.disabled=false; btn.textContent='+ Guardar entrega'; }
+}
+
+async function addBien() {
+  if (!bf.concepto||!bf.categoria) { showAlert('Completá concepto y categoría.','err'); return; }
+  const btn = document.getElementById('btn-add-b');
+  if (btn) { btn.disabled=true; btn.textContent='Guardando...'; }
+  const rec = {concepto:bf.concepto,categoria:bf.categoria,ano:bf.ano,mes:bf.mes,expediente:bf.expediente||null,precio_unitario:bf.precio_unitario||null,cantidad:bf.cantidad||null,subsecretaria:bf.subsecretaria||null,observaciones:bf.observaciones||null};
+  const {error} = await db.from('bienes_adquiridos').insert([rec]);
+  if (error) { showAlert('Error: '+error.message,'err'); }
+  else {
+    bf={...bf,concepto:"",expediente:"",precio_unitario:"",cantidad:"",observaciones:""};
+    showAlert('✓ Bien guardado.');
+    await loadData('bienes');
+    await updateHeader();
+  }
+  if (btn) { btn.disabled=false; btn.textContent='+ Guardar bien'; }
+}
+
+async function delEntrega(id) {
+  if (!confirm('¿Eliminar este registro?')) return;
+  await db.from('entregas').delete().eq('id',id);
+  await loadData('entregas'); await updateHeader();
+}
+async function delBien(id) {
+  if (!confirm('¿Eliminar este registro?')) return;
+  await db.from('bienes_adquiridos').delete().eq('id',id);
+  await loadData('bienes'); await updateHeader();
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+async function exportXLSX() {
+  const btn = event.target; btn.textContent='Descargando...'; btn.disabled=true;
+  const {data:eRows} = await db.from('entregas').select('*').order('id').limit(10000);
+  const {data:bRows} = await db.from('bienes_adquiridos').select('*').order('id').limit(5000);
+  const wb = XLSX.utils.book_new();
+  const eCols = ["AÑO","MES","MUNICIPIO","PROGRAMA","ÁREA","CATEGORÍA","CONCEPTO","AÑO ADQ","MES ADQ","MONTO UNIT.","CANTIDAD","FECHA REMITO","ESTADO","MONTO TOTAL","OBSERVACIONES"];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([eCols,...(eRows||[]).map(e=>[e.ano,e.mes,e.municipio,e.programa,e.area,e.categoria,e.concepto,e.ano_adq,e.mes_adq,e.monto_unitario,e.cantidad,e.fecha_remito,e.estado,e.monto_total,e.observaciones])]),"Entregas");
+  const bCols = ["CONCEPTO","CATEGORÍA","AÑO","MES","EXPEDIENTE","PRECIO UNIT.","CANTIDAD","SUBSECRETARÍA","OBSERVACIONES"];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([bCols,...(bRows||[]).map(b=>[b.concepto,b.categoria,b.ano,b.mes,b.expediente,b.precio_unitario,b.cantidad,b.subsecretaria,b.observaciones])]),"Bienes Adquiridos");
+  XLSX.writeFile(wb,'seguimiento_export_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  btn.textContent='⬇ Descargar .xlsx'; btn.disabled=false;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function showAlert(msg, type='ok') {
+  alertMsg={msg,type}; render();
+  if (alertTimer) clearTimeout(alertTimer);
+  alertTimer = setTimeout(()=>{alertMsg=null;renderContent();},3000);
+}
+function fmtMoney(v) {
+  if (!v && v!==0) return '-';
+  return '$'+Number(v).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+function onEF(n,v){ef[n]=v; if(n==='categoria')ef.concepto=''; renderContent();}
+function onBF(n,v){bf[n]=v; if(n==='categoria')bf.concepto=''; renderContent();}
+function onQF(n,v){qf[n]=v; pages.consultas=1; loadData('consultas');}
+function clrQ(){qf={municipio:'',programa:'',categoria:'',estado:'',ano:'',texto:''}; pages.consultas=1; loadData('consultas');}
+function goPage(tab,p){ pages[tab]=p; loadData(tab); }
+
+function sel(name,opts,val,ph,handler){
+  const p=ph?`<option value="">${ph}</option>`:'';
+  return `<select onchange="${handler||'onEF'}('${name}',this.value)">${p}${opts.map(o=>`<option value="${o}"${o==val?' selected':''}>${o}</option>`).join('')}</select>`;
+}
+function inp(name,val,type,ph,handler){
+  return `<input type="${type||'text'}" value="${(val||'').toString().replace(/"/g,'&quot;')}" placeholder="${ph||''}" oninput="${handler||'onEF'}('${name}',this.value)">`;
+}
+
+function pager(tab,count){
+  const pg=pages[tab], total=Math.max(1,Math.ceil(count/PAGE));
+  return `<div class="pager">
+    <span>${pg}/${total} · ${count.toLocaleString('es-AR')} registros</span>
+    <button onclick="goPage('${tab}',${pg-1})" ${pg<=1?'disabled':''}>← Ant.</button>
+    <button onclick="goPage('${tab}',${pg+1})" ${pg>=total?'disabled':''}>Sig. →</button>
+  </div>`;
+}
+
+function tableE(rows, tab, count){
+  if (loading[tab]) return `<div class="loading-inline"><div class="mini-spin"></div>Cargando...</div>`;
+  if (!rows.length) return `<div class="empty">Sin registros para mostrar.</div>`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Año</th><th>Mes</th><th>Municipio</th><th>Programa</th><th>Categoría</th><th>Concepto</th><th>Cant.</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${rows.map(e=>`<tr>
+      <td>${e.ano||'-'}</td><td>${e.mes||'-'}</td>
+      <td title="${e.municipio||''}">${e.municipio||'-'}</td>
+      <td title="${e.programa||''}">${(e.programa||'-').substring(0,18)}${e.programa&&e.programa.length>18?'…':''}</td>
+      <td title="${e.categoria||''}">${(e.categoria||'-').substring(0,16)}${e.categoria&&e.categoria.length>16?'…':''}</td>
+      <td title="${e.concepto||''}">${(e.concepto||'-').substring(0,16)}${e.concepto&&e.concepto.length>16?'…':''}</td>
+      <td>${e.cantidad||'-'}</td>
+      <td>${e.monto_total?fmtMoney(e.monto_total):'-'}</td>
+      <td><span class="badge ${e.estado==='ENTREGADO'?'bg':e.estado==='PENDIENTE'?'ba':'bx'}">${e.estado||'-'}</span></td>
+      <td><button class="btn btn-danger" style="padding:2px 7px;font-size:10px" onclick="delEntrega(${e.id})">✕</button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>${pager(tab,count)}`;
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function alertHtml(tab){
+  return alertMsg&&activeTab===tab ? `<div class="alert alert-${alertMsg.type}">${alertMsg.msg}</div>` : '';
+}
+
+function renderEntregas(){
+  const conc = ef.categoria ? (CAT_CONC[ef.categoria]||[]) : [];
+  return `<div class="card">
+    <div class="section-title">Nueva entrega</div>
+    ${alertHtml('entregas')}
+    <div class="form-grid">
+      <div class="fg"><label>Año *</label>${sel('ano',ANOS,ef.ano,'— Año —')}</div>
+      <div class="fg"><label>Mes</label>${sel('mes',MESES,ef.mes,'— Mes —')}</div>
+      <div class="fg"><label>Municipio *</label>${sel('municipio',MUNICIPIOS,ef.municipio,'— Municipio —')}</div>
+      <div class="fg"><label>Programa</label>${sel('programa',PROGRAMAS,ef.programa,'— Programa —')}</div>
+      <div class="fg"><label>Área</label>${sel('area',AREAS,ef.area,'— Área —')}</div>
+      <div class="fg"><label>Categoría *</label>${sel('categoria',CATEGORIAS,ef.categoria,'— Categoría —')}</div>
+      <div class="fg"><label>Concepto *</label>${ef.categoria?sel('concepto',conc,ef.concepto,'— Concepto —'):`<select disabled><option>Seleccioná categoría</option></select>`}</div>
+      <div class="fg"><label>Año adq.</label>${sel('ano_adq',ANOS,ef.ano_adq,'s/f')}</div>
+      <div class="fg"><label>Mes adq.</label>${sel('mes_adq',MESES,ef.mes_adq,'s/d')}</div>
+      <div class="fg"><label>Monto unitario ($)</label>${inp('monto_unitario',ef.monto_unitario,'number','0')}</div>
+      <div class="fg"><label>Cantidad</label>${inp('cantidad',ef.cantidad,'number','1')}</div>
+      <div class="fg"><label>Fecha remito</label>${inp('fecha_remito',ef.fecha_remito,'date','')}</div>
+      <div class="fg"><label>Estado</label>${sel('estado',ESTADOS,ef.estado,'')}</div>
+      <div class="fg span2"><label>Observaciones</label><textarea oninput="onEF('observaciones',this.value)">${ef.observaciones||''}</textarea></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-add-e" onclick="addEntrega()">+ Guardar entrega</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">Registros — últimas entregas</div>
+    ${tableE(cachedRows.entregas,'entregas',cachedCount.entregas)}
+  </div>`;
+}
+
+function renderBienes(){
+  const conc = bf.categoria ? (CAT_CONC[bf.categoria]||[]) : [];
+  const rows = cachedRows.bienes, count = cachedCount.bienes;
+  return `<div class="card">
+    <div class="section-title">Registrar bien adquirido</div>
+    ${alertHtml('bienes')}
+    <div class="form-grid">
+      <div class="fg"><label>Categoría *</label>${sel('categoria',CATEGORIAS,bf.categoria,'— Categoría —','onBF')}</div>
+      <div class="fg"><label>Concepto *</label>${bf.categoria?sel('concepto',conc,bf.concepto,'— Concepto —','onBF'):`<select disabled><option>Seleccioná categoría</option></select>`}</div>
+      <div class="fg"><label>Año adq.</label>${sel('ano',ANOS,bf.ano,'','onBF')}</div>
+      <div class="fg"><label>Mes adq.</label>${sel('mes',MESES,bf.mes,'— Mes —','onBF')}</div>
+      <div class="fg"><label>Expediente</label>${inp('expediente',bf.expediente,'text','EX-2025-...','onBF')}</div>
+      <div class="fg"><label>Precio unitario ($)</label>${inp('precio_unitario',bf.precio_unitario,'number','0','onBF')}</div>
+      <div class="fg"><label>Stock / Cantidad</label>${inp('cantidad',bf.cantidad,'number','0','onBF')}</div>
+      <div class="fg"><label>Subsecretaría</label>${inp('subsecretaria',bf.subsecretaria,'text','','onBF')}</div>
+      <div class="fg span2"><label>Observaciones</label><textarea oninput="onBF('observaciones',this.value)">${bf.observaciones||''}</textarea></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-add-b" onclick="addBien()">+ Guardar bien</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">Bienes adquiridos</div>
+    ${loading.bienes?`<div class="loading-inline"><div class="mini-spin"></div>Cargando...</div>`:!rows.length?`<div class="empty">Sin registros.</div>`:`
+    <div class="table-wrap"><table>
+      <thead><tr><th>Concepto</th><th>Categoría</th><th>Año</th><th>Mes</th><th>Expediente</th><th>Precio</th><th>Stock</th><th></th></tr></thead>
+      <tbody>${rows.map(b=>`<tr>
+        <td title="${b.concepto||''}">${(b.concepto||'-').substring(0,20)}${b.concepto&&b.concepto.length>20?'…':''}</td>
+        <td title="${b.categoria||''}">${(b.categoria||'-').substring(0,16)}${b.categoria&&b.categoria.length>16?'…':''}</td>
+        <td>${b.ano||'-'}</td><td>${b.mes||'-'}</td>
+        <td style="font-size:11px;font-family:monospace" title="${b.expediente||''}">${(b.expediente||'-').substring(0,20)}${b.expediente&&b.expediente.length>20?'…':''}</td>
+        <td>${b.precio_unitario?fmtMoney(b.precio_unitario):'-'}</td>
+        <td>${b.cantidad||'-'}</td>
+        <td><button class="btn btn-danger" style="padding:2px 7px;font-size:10px" onclick="delBien(${b.id})">✕</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>${pager('bienes',count)}`}
+  </div>`;
+}
+
+function renderConsultas(){
+  const a = cachedAgg;
+  return `<div class="card">
+    <div class="section-title">Filtros</div>
+    <div class="filters">
+      <div class="ff"><label>Año</label><select onchange="onQF('ano',this.value)"><option value="">Todos</option>${ANOS.map(x=>`<option value="${x}"${x==qf.ano?' selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="ff"><label>Municipio</label><select onchange="onQF('municipio',this.value)"><option value="">Todos</option>${MUNICIPIOS.map(x=>`<option value="${x}"${x==qf.municipio?' selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="ff"><label>Programa</label><select onchange="onQF('programa',this.value)"><option value="">Todos</option>${PROGRAMAS.map(x=>`<option value="${x}"${x==qf.programa?' selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="ff"><label>Categoría</label><select onchange="onQF('categoria',this.value)"><option value="">Todas</option>${CATEGORIAS.map(x=>`<option value="${x}"${x==qf.categoria?' selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="ff"><label>Estado</label><select onchange="onQF('estado',this.value)"><option value="">Todos</option>${ESTADOS.map(x=>`<option value="${x}"${x==qf.estado?' selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="ff" style="min-width:160px"><label>Texto libre</label><input type="text" value="${qf.texto}" placeholder="municipio, concepto..." oninput="onQF('texto',this.value)"></div>
+      <button class="btn btn-secondary" style="align-self:flex-end" onclick="clrQ()">✕ Limpiar</button>
+    </div>
+    <div class="metrics">
+      <div class="metric"><div class="v">${(a.count||0).toLocaleString('es-AR')}</div><div class="l">Registros</div></div>
+      <div class="metric"><div class="v">${(a.munis||0)}</div><div class="l">Municipios</div></div>
+      <div class="metric"><div class="v">${(a.qty||0).toLocaleString('es-AR')}</div><div class="l">Unidades</div></div>
+      <div class="metric"><div class="v">${a.monto?fmtMoney(a.monto):'$0'}</div><div class="l">Monto total</div></div>
+      <div class="metric"><div class="v">${(a.entregados||0).toLocaleString('es-AR')}</div><div class="l">Entregados</div></div>
+      <div class="metric"><div class="v">${a.count?Math.round((a.entregados||0)/a.count*100):0}%</div><div class="l">% Entregado</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">Resultados</div>
+    ${tableE(cachedRows.consultas,'consultas',cachedCount.consultas)}
+  </div>`;
+}
+
+function renderExportar(){
+  return `<div class="card">
+    <div class="section-title">Exportar a Excel</div>
+    <div class="exp-block">
+      <p>Descarga todos los registros de Supabase como un archivo .xlsx con dos hojas (<strong>Entregas</strong> y <strong>Bienes Adquiridos</strong>). Compatible con Looker Studio, Google Sheets y Excel.</p>
+      <button class="btn btn-export" onclick="exportXLSX()">⬇ Descargar .xlsx</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title">Esquema de la base de datos</div>
+    <pre>entregas (ano, mes, municipio, programa, area, categoria,
+           concepto, ano_adq, mes_adq, monto_unitario,
+           cantidad, fecha_remito, estado, monto_total,
+           observaciones, created_at)
+
+bienes_adquiridos (concepto, categoria, ano, mes, expediente,
+                   precio_unitario, cantidad, subsecretaria,
+                   observaciones, created_at)</pre>
+  </div>
+  <div class="card">
+    <div class="section-title">Conectar con Looker Studio</div>
+    <div class="exp-block">
+      <p>En Looker Studio → <strong>Agregar datos</strong> → buscar <strong>"Supabase"</strong> o usar el conector PostgreSQL con los datos de tu proyecto (Settings → Database → Connection info).</p>
+      <p>Alternativamente, exportá el .xlsx y subilo a Google Sheets — Looker Studio lo detecta automáticamente.</p>
+    </div>
+  </div>`;
+}
+
+function renderContent(){
+  const map={entregas:renderEntregas,bienes:renderBienes,consultas:renderConsultas,exportar:renderExportar};
+  document.getElementById('content').innerHTML=(map[activeTab]||renderEntregas)();
+}
+function render(){ renderContent(); }
+</script>
+</body>
+</html>
